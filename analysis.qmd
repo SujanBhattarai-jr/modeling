@@ -1,0 +1,153 @@
+```{r}
+# Load necessary packages
+library(deSolve)
+
+# Define parameters
+r_prey <- 0.95   # Growth rate of prey
+alpha <- 0.01    # Predation rate coefficient
+eff <- 0.6       # Conversion efficiency of prey into predators
+p_mort <- 0.4    # Mortality rate of predators
+K <- 2000        # Carrying capacity of prey
+
+# Define the model
+pred_prey_model <- function(t, state, parameters) {
+  with(as.list(c(state, parameters)), {
+    dPrey <- r_prey * Prey * (1 - Prey / K) - alpha * Prey * Predator
+    dPredator <- eff * alpha * Prey * Predator - p_mort * Predator
+    list(c(dPrey, dPredator))
+  })
+}
+
+# Initial state values
+initial_state <- c(Prey = 1000, Predator = 100)
+
+# Time points
+times <- seq(0, 200, by = 1)
+
+# Parameters
+parameters <- c(r_prey = r_prey, alpha = alpha, eff = eff, p_mort = p_mort, K = K)
+
+# Solving the model
+out <- ode(y = initial_state, times = times, func = pred_prey_model, parms = parameters)
+
+# Convert output to data frame
+out <- as.data.frame(out)
+
+# Plot the results
+library(ggplot2)
+ggplot(data = out, aes(x = time)) +
+  geom_line(aes(y = Prey, color = "Prey")) +
+  geom_line(aes(y = Predator, color = "Predator")) +
+  labs(title = "Predator-Prey Model", y = "Population", x = "Time") +
+  theme_minimal() +
+  scale_color_manual(values = c("Prey" = "blue", "Predator" = "red"))
+
+```
+
+```{r}
+# Define hunting parameters
+hunting_rate <- 0.08   # Proportion of prey hunted per time unit
+min_prey_pop <- 500    # Minimum prey population before hunting is allowed
+
+# Modified model with hunting
+pred_prey_hunting_model <- function(t, state, parameters) {
+  with(as.list(c(state, parameters)), {
+    hunting = ifelse(Prey > min_prey_pop, hunting_rate * Prey, 0)
+    dPrey <- r_prey * Prey * (1 - Prey / K) - alpha * Prey * Predator - hunting
+    dPredator <- eff * alpha * Prey * Predator - p_mort * Predator
+    list(c(dPrey, dPredator))
+  })
+}
+
+# Solving the modified model
+out_hunting <- ode(y = initial_state, times = times, func = pred_prey_hunting_model, parms = parameters)
+
+# Convert output to data frame
+out_hunting <- as.data.frame(out_hunting)
+
+# Plot the results
+ggplot(data = out_hunting, aes(x = time)) +
+  geom_line(aes(y = Prey, color = "Prey")) +
+  geom_line(aes(y = Predator, color = "Predator")) +
+  labs(title = "Predator-Prey Model with Hunting", y = "Population", x = "Time") +
+  theme_minimal() +
+  scale_color_manual(values = c("Prey" = "blue", "Predator" = "red"))
+
+```
+
+```{r}
+#Step 3: Evaluating the Impact of Hunting on Population Stability
+# Function to run the model with varying hunting rates and minimum prey populations
+run_model <- function(hunting_rate, min_prey_pop) {
+  pred_prey_hunting_model <- function(t, state, parameters) {
+    with(as.list(c(state, parameters)), {
+      hunting = ifelse(Prey > min_prey_pop, hunting_rate * Prey, 0)
+      dPrey <- r_prey * Prey * (1 - Prey / K) - alpha * Prey * Predator - hunting
+      dPredator <- eff * alpha * Prey * Predator - p_mort * Predator
+      list(c(dPrey, dPredator))
+    })
+  }
+
+  out <- ode(y = initial_state, times = times, func = pred_prey_hunting_model, parms = parameters)
+  as.data.frame(out)
+}
+
+# Define ranges for exploration
+hunting_rates <- seq(0, 0.1, by = 0.01)
+min_prey_pops <- seq(100, 1000, by = 100)
+
+# Run simulations
+results <- expand.grid(hunting_rate = hunting_rates, min_prey_pop = min_prey_pops)
+results$Prey_final <- NA
+results$Predator_final <- NA
+
+for (i in 1:nrow(results)) {
+  res <- run_model(results$hunting_rate[i], results$min_prey_pop[i])
+  results$Prey_final[i] <- tail(res$Prey, 1)
+  results$Predator_final[i] <- tail(res$Predator, 1)
+}
+
+# Plot results
+ggplot(results, aes(x = hunting_rate, y = Prey_final, color = as.factor(min_prey_pop))) +
+  geom_line() +
+  labs(title = "Effect of Hunting Rate on Final Prey Population", y = "Final Prey Population", x = "Hunting Rate") +
+  theme_minimal() +
+  scale_color_discrete(name = "Minimum Prey Population")
+
+
+```
+
+
+
+
+```{r}
+#Step 4: Defining Stability and Recommending Sustainable Hunting Level
+#We'll define a stability metric based on maintaining the prey #and predator populations above certain thresholds over a long #period. Here, we'll consider the populations stable if both #are above 100 after 50 years.
+
+# Define stability metric
+# Define stability criteria
+is_stable <- function(prey, predator, threshold = 100, time_horizon = 50) {
+  time_idx <- which(times == time_horizon)
+  return(prey[time_idx] > threshold & predator[time_idx] > threshold)
+}
+
+# Identify sustainable hunting rates
+results$Stable <- mapply(is_stable, results$Prey_final, results$Predator_final)
+
+# Find the optimal hunting rate
+optimal_hunting <- results[results$Stable == TRUE, ]
+optimal_hunting <- optimal_hunting[which.max(optimal_hunting$hunting_rate), ]
+
+# Output the optimal hunting rate and justification
+optimal_hunting_rate <- optimal_hunting$hunting_rate
+optimal_min_prey_pop <- optimal_hunting$min_prey_pop
+cat("Optimal Hunting Rate:", optimal_hunting_rate, "\n")
+cat("Minimum Prey Population:", optimal_min_prey_pop, "\n")
+cat("Justification: This hunting rate maintains stable populations for both prey and predators, ensuring sustainability.")
+
+
+
+```
+
+
+
